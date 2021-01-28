@@ -1,6 +1,7 @@
 import { stringInput } from "lezer-tree";
 import { Stmt, Expr, Type, Parameter } from "./ast";
 import { parse } from "./parser";
+import { typeCheck } from "./typecheck"
 
 // https://learnxinyminutes.com/docs/wasm/
 
@@ -42,9 +43,7 @@ export function augmentEnv(env: GlobalEnv, stmts: Array<Stmt>): GlobalEnv {
         break;
       case "define":
         var paramMap = Array<Type>();
-        s.parameters.forEach(s => {
-          if (s.type != Type.none) paramMap.push(s.type);
-        });
+        s.parameters.forEach(s => { if (s.type != Type.none) paramMap.push(s.type) });
         newFuncs.set(s.name, { "paramTypes": paramMap, "retType": s.ret, index: newFuncIndex });
         newFuncIndex++;
         break;
@@ -85,21 +84,14 @@ export function compile(source: string, env: GlobalEnv): CompileResult {
   });
   // Add (elem ) to newly defined functions
   if (hasDefine) {
-    //(elem (i32.const 0) $print $printglobal)
-    ast.forEach((stmt, i) => {
-      if (stmt.tag === "define") {
-        elems.push(`$${stmt.name} `);
-      }
-    });
-    console.log(elems[0].slice(1,-1));
-    elems = [`(elem (i32.const ${withDefines.funcs.get(elems[0].slice(1,-1)).index})`].concat(elems).concat([")"]);
+    ast.forEach((stmt, i) => { if (stmt.tag === "define") elems.push(`$${stmt.name} `) });
+    elems = [`(elem (i32.const ${withDefines.funcs.get(elems[0].slice(1, -1)).index})`].concat(elems).concat([")"]);
   }
   const allFuns = funs.concat(elems.flat()).join("\n\n");
 
   // add (type) to all global functions
   let typeCode: Array<string> = [];
   withDefines.funcs.forEach((type, name) => {
-    //(type $ft (func (param i64)))
     if (name != "print" && name != "globals") {
       var funcInfo = [`(type $${name} (func `];
       type.paramTypes.forEach(paramType => { funcInfo = funcInfo.concat(["(param i64) "]) });
@@ -112,9 +104,7 @@ export function compile(source: string, env: GlobalEnv): CompileResult {
 
   // remove define
   const stmts = ast.filter((stmt) => stmt.tag !== "define");
-
-  const commandGroups = stmts.map((stmt) => codeGen(stmt, withDefines)).flat();
-  const commands = commandGroups;
+  const commands = stmts.map((stmt) => codeGen(stmt, withDefines)).flat();
   return {
     wasmFuncs: allFuns,
     wasmSource: [`(local $$last i64)`].concat(commands).join("\n"),
@@ -134,130 +124,6 @@ function funEnvLookup(env: GlobalEnv, name: string): number {
   return (env.funcs.get(name).index); // 4-byte values
 }
 
-///////
-function typeCheck(ast: Stmt[], env: GlobalEnv): boolean {
-  ast.forEach(s => {
-    tcStmt(s, env);
-  });
-  return true;
-}
-
-function tcStmt(stmt: Stmt, env: GlobalEnv): Type {
-
-  switch (stmt.tag) {
-    case "assign":
-      if (!env.globals.has(stmt.name)) throw new Error("Not a variable: " + stmt.name);
-      const type: Type = tcExpr(stmt.value, env);
-      const oriType: Type = env.globals.get(stmt.name).type;
-      console.log(type + " " + oriType);
-      if (type != oriType) throw new Error("Expected type `" + oriType + "`; got type `" + type + "`");
-      return type;
-
-    case "expr":
-      return tcExpr(stmt.expr, env);
-
-    case "init":
-      // check dup
-      if (env.globals.has(stmt.name)) throw new Error("Duplicate declaration of identifier in same scope: " + stmt.name);
-      env.globals.set(stmt.name, { offset: 0, type: stmt.type });
-      const assignedType: Type = tcExpr(stmt.value, env);
-      // check type
-      if (assignedType != stmt.type) {
-        throw new Error("Expected type `" + stmt.type + "`; got type `" + assignedType + "`");
-      }
-      return stmt.type;
-
-    case "if":
-      var ifcondType = tcExpr(stmt.ifcond, env);
-      if (ifcondType != Type.bool) throw new Error("Condition expression cannot be of type `" + ifcondType + "`");
-      if (stmt.ifthen.length == 0) throw new Error("Parse error near token ");
-      if (stmt.elifcond != null && tcExpr(stmt.elifcond, env) != Type.bool) throw new Error("Condition expression cannot be of type `" + ifcondType + "`");
-      if (stmt.elifcond != null && stmt.elifthen.length == 0) throw new Error("Parse error near token ");
-      if (stmt.elscond && stmt.els.length == 0) throw new Error("Parse error near token ");
-      stmt.ifthen.map(st => tcStmt(st, env));
-      stmt.elifthen.map(st => tcStmt(st, env));
-      stmt.els.map(st => tcStmt(st, env));
-      return Type.any;
-    case "pass":
-      return Type.any;
-    case "return":
-      if (stmt.value == null) return Type.none;
-      return tcExpr(stmt.value, env);
-    case "while":
-      var ifcondType = tcExpr(stmt.cond, env);
-      if (ifcondType != Type.bool) throw new Error("Condition expression cannot be of type `" + ifcondType + "`");
-      stmt.body.map(st => tcStmt(st, env));
-      return Type.any;
-    case "define":
-      env.funcs.set(stmt.name, { paramTypes: stmt.parameters.map(x => x.type), retType: stmt.ret, index: 0 });
-      var localEnv = new Map(env.globals);
-      stmt.body.forEach(st => {
-        if (st.tag == "init") localEnv.delete(st.name);
-      });
-      stmt.parameters.forEach(param => {
-        localEnv.set(param.name, { offset: 0, type: param.type });
-      });
-      stmt.body.map(st => tcStmt(st, { globals: localEnv, funcs: env.funcs, offset: env.offset, funcIndex: env.funcIndex }));
-      return Type.any;
-  }
-}
-
-function tcExpr(expr: Expr, env: GlobalEnv): Type {
-  //console.log(expr.tag);
-  switch (expr.tag) {
-    case "num":
-      return Type.int;
-    case "bool":
-      return Type.bool;
-    case "id":
-      if (!env.globals.has(expr.name)) throw new Error("Not a Variable " + expr.name);
-      return env.globals.get(expr.name).type;
-    case "none":
-      return Type.none;
-    case "binop":
-      let leftType = tcExpr(expr.operand1, env);
-      let rightType = tcExpr(expr.operand2, env);
-      switch (expr.operator) {
-        case "+":
-        case "-":
-        case "*":
-        case "//":
-        case "%":
-          if (leftType == rightType && leftType == Type.int) return Type.int;
-          else throw new Error("Cannot apply operator `" + expr.operator + "` on types `" + leftType + "` and `" + rightType + "`");
-        case "<=":
-        case ">=":
-        case "<":
-        case ">":
-          if (leftType == rightType && leftType == Type.int) return Type.bool;
-          else throw new Error("Cannot apply operator `" + expr.operator + "` on types `" + leftType + "` and `" + rightType + "`");
-        case "==":
-        case "!=":
-          if (leftType == rightType) return Type.bool;
-          else throw new Error("Cannot apply operator `" + expr.operator + "` on types `" + leftType + "` and `" + rightType + "`");
-        case "is":
-          if (leftType == rightType && leftType == Type.none) return Type.bool;
-          else throw new Error("Cannot apply operator `" + expr.operator + "` on types `" + leftType + "` and `" + rightType + "`");
-        default: throw new Error("Cannot apply operator `" + expr.operator + "` on types `" + leftType + "` and `" + rightType + "`");
-      }
-    case "uniop":
-      if (expr.operator == "not") {
-        if (tcExpr(expr.operand, env) != Type.bool) throw new Error("Cannot apply operator `not` on type `int`");
-        return Type.bool;
-      }
-      else if (expr.operator == "-") {
-        if (tcExpr(expr.operand, env) != Type.int) throw new Error("Cannot apply operator `-` on type `bool`");
-        return Type.int;
-      }
-      else throw new Error("Parse error near token: " + expr.operator);
-    case "call":
-      return Type.none;
-    case "builtin1":
-      return tcExpr(expr.arg, env);
-  }
-}
-
-////////
 function getIfBodyCode(stmts: Array<Stmt>, env: GlobalEnv): string {
   var ifthen = stmts.map(st => codeGen(st, env));
   var lastStmt = stmts[stmts.length - 1];
@@ -272,7 +138,6 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
       if (stmt.expr.tag == "call") {
         if (env.funcs.get(stmt.expr.name).retType == Type.none) {
           getLast = false;
-          console.log("get void call here");
           return exprStmts;
         }
         getLast = true;
@@ -282,17 +147,13 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
 
     case "init":
       var valStmts = codeGenExpr(stmt.value, env);
-      if (!env.globals.has(stmt.name)) {
-        return valStmts.concat([`(local.set $${stmt.name})`]);
-      }
+      if (!env.globals.has(stmt.name)) return valStmts.concat([`(local.set $${stmt.name})`]);
       var locationToStore = [`(i32.const ${envLookup(env, stmt.name)}) ;; ${stmt.name}`];
       return locationToStore.concat(valStmts).concat([`(i64.store)`]);
 
     case "assign":
       var valStmts = codeGenExpr(stmt.value, env);
-      if (!env.globals.has(stmt.name)) {
-        return valStmts.concat([`(local.set $${stmt.name})`]);
-      }
+      if (!env.globals.has(stmt.name)) return valStmts.concat([`(local.set $${stmt.name})`]);
       var locationToStore = [`(i32.const ${envLookup(env, stmt.name)}) ;; ${stmt.name}`];
       return locationToStore.concat(valStmts).concat([`(i64.store)`]);
 
@@ -300,7 +161,6 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
       // body
       var definedVars = new Set<string>();
       var newGlobals = new Map(env.globals); //
-      //var localEnv = new Map(env); 
       stmt.body.forEach(s => { if (s.tag === "init") { definedVars.add(s.name); } });
       var scratchVar: string = `(local $$last i64)`;
       var localDefines = [scratchVar];
@@ -310,40 +170,34 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
       })
       stmt.parameters.forEach(param => { newGlobals.delete(param.name); }); //
       console.log(newGlobals);
-      //var stmts = stmt.body.filter((stmt) => stmt.tag !== "define").map(st => codeGen(st, localEnv)).flat();
       var stmts = stmt.body.filter((stmt) => stmt.tag !== "define")
         .map(st => codeGen(st, { globals: newGlobals, funcs: env.funcs, offset: env.offset, funcIndex: env.funcIndex }))
         .flat(); //
-      if (stmt.body[stmt.body.length - 1].tag == "if") stmts = stmts.concat("(local.get $$last)");
+      if (stmt.body[stmt.body.length - 1].tag == "if" && stmt.ret != Type.none) stmts = stmts.concat("(local.get $$last)");
       var params = stmt.parameters.map(p => p.name == "" ? "" : `(param $${p.name} i64)`).join(" ");
       var ret = stmt.ret == Type.none ? "" : "(result i64)";
       var stmtsBody = localDefines.concat(stmts).join("\n");
-      //console.log(`(func $${stmt.name} ${params} ${ret} ${stmtsBody})`);
       return [`(func $${stmt.name} ${params} ${ret} ${stmtsBody})`];
-    //return [`(func (export "${stmt.name}") ${params} ${ret} ${stmtsBody})`];
 
     case "return":
       return (stmt.value == null ? [""] : codeGenExpr(stmt.value, env));
 
     case "pass":
       break;
+      
     case "if":
-      //tag: "if", ifcond: Expr, ifthen: Array<Stmt>, elifcond: Expr, elifthen: Array<Stmt>, elscond: boolean, els: Array<Stmt> }
       var ifcond = codeGenExpr(stmt.ifcond, env);
       ifcond = ["(i32.and "].concat(ifcond).concat(["(i32.wrap/i64)"]).concat(["(i32.const 1))"]);
-      //var ifthen = stmt.ifthen.map(st=>codeGen(st,env)).flat().join("\n");
       var ifthen = getIfBodyCode(stmt.ifthen, env);
       var valStmts = [`(if (result i64)`].concat(ifcond).concat([`(then ${ifthen})`]);
 
       if (stmt.elifcond != null) {
         var elifcond = codeGenExpr(stmt.elifcond, env);
         elifcond = ["(i32.and "].concat(elifcond).concat(["(i32.wrap/i64)"]).concat(["(i32.const 1))"]);
-        //var elifthen = stmt.elifthen.map(st=>codeGen(st,env)).flat().join("\n");
         var elifthen = getIfBodyCode(stmt.elifthen, env);
         valStmts = valStmts.concat([`(else `]).concat([`(if (result i64)`])
           .concat(elifcond).concat([`(then ${elifthen})`])
         if (stmt.elscond) {
-          //var els = stmt.els.map(st=>codeGen(st,env)).flat().join("\n");
           var els = getIfBodyCode(stmt.els, env);
           valStmts = valStmts.concat([`(else `]).concat(els).concat([`)`]);
         }
@@ -351,7 +205,6 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
         valStmts = valStmts.concat([`))`]);
       }
       else if (stmt.elscond) {
-        //var els = stmt.els.map(st=>codeGen(st,env)).flat().join("\n");
         var els = getIfBodyCode(stmt.els, env);
         valStmts = valStmts.concat([`(else `]).concat(els).concat([`)`]);
       }
@@ -362,7 +215,6 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
       var whileCond = ["(i32.xor "].concat(codeGenExpr(stmt.cond, env)).concat(["(i32.wrap/i64)"]).concat(["(i32.const 1))"]);
       var whileStmt = ["(block "].concat(["(br_if 0"]).concat(whileCond).concat([")"]).concat(["(loop "]);
       whileStmt = whileStmt.concat(stmt.body.map(st => codeGen(st, env)).flat().join("\n"));
-      //whileStmt = whileStmt.concat(["(br_if 1 "]).concat(["(i32.xor "]).concat(whileCond).concat(["(i32.const 1))"]).concat([")"]);
       whileStmt = whileStmt.concat(["(br_if 1 "]).concat(whileCond).concat([")"]);
       whileStmt = whileStmt.concat(["(br 0) ))"])
       return whileStmt;
@@ -381,7 +233,6 @@ function codeGenExpr(expr: Expr, env: GlobalEnv): Array<string> {
       const boolVal = expr.value ? 1 : 0;
       return ["(i64.const " + (boolTag + boolVal) + ")"];
     case "binop":
-      //console.log(expr.operand1.tag + " " + expr.operand2.tag);
       const operator = expr.operator;
       switch (operator) {
         case "+":
@@ -429,7 +280,7 @@ function codeGenExpr(expr: Expr, env: GlobalEnv): Array<string> {
         });
         return globalStmts;
       }
-      else if (expr.name == "print") return expr.arguments.map(ex=>codeGenExpr(ex, env)).flat().concat([`(call $${expr.name})`]);
+      else if (expr.name == "print") return expr.arguments.map(ex => codeGenExpr(ex, env)).flat().concat([`(call $${expr.name})`]);
       else {
         return expr.arguments.map(ex => codeGenExpr(ex, env)).flat()
           .concat([`(i32.const ${funEnvLookup(env, expr.name)})`])
