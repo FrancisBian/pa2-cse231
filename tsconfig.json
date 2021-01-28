@@ -8,5 +8,8 @@
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "lib": [
+      "es2019", "DOM"
+    ]
   }
 }

@@ -9,10 +9,22 @@ function webStart() {
     var importObject = {
       imports: {
         imported_func: (arg : any) => {
+          /*
           console.log("Logging from WASM: ", arg);
           const elt = document.createElement("pre");
           document.getElementById("output").appendChild(elt);
           elt.innerText = arg;
+          */
+          console.log("Logging from WASM: ", arg);
+          const elt = document.createElement("pre");
+          document.getElementById("output").appendChild(elt);
+          const checkType = BigInt(arg) / BigInt(Math.pow(2,31));
+          if (checkType != BigInt(0)) {
+            arg = 1 & Number(arg);
+            if (arg == 0) elt.innerText = "False";
+            else elt.innerText = "True";
+          }
+          else elt.innerText = arg;      
         },
 
         print_global_func: (pos: number, value: number) => {
@@ -26,7 +38,7 @@ function webStart() {
     
       updateNameMap : (env : GlobalEnv) => {
         env.globals.forEach((pos, name) => {
-          importObject.nameMap[pos] = name;
+          importObject.nameMap[pos.offset] = name;
         })
       }
     };
@@ -51,7 +63,7 @@ function webStart() {
       document.getElementById("output").innerHTML = "";
       const replCodeElement = document.getElementById("next-code") as HTMLInputElement;
       replCodeElement.addEventListener("keypress", (e) => {
-        if(e.key === "Enter") {
+        if(e.key === "Enter" && !(e.shiftKey)) {
           const output = document.createElement("div");
           const prompt = document.createElement("span");
           prompt.innerText = "»";

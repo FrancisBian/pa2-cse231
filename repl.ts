@@ -1,5 +1,6 @@
 import {run} from "./runner";
-import {emptyEnv, GlobalEnv} from "./compiler";
+import {emptyEnv, GlobalEnv, FuncType} from "./compiler";
+import { Type } from "./ast";
 
 interface REPL {
   run(source : string) : Promise<any>;
@@ -11,13 +12,22 @@ export class BasicREPL {
   memory: any
   constructor(importObject : any) {
     this.importObject = importObject;
+    /*
     if(!importObject.js) {
       const memory = new WebAssembly.Memory({initial:10, maximum:20});
       this.importObject.js = { memory: memory };
     }
+    */
+    //
+    var emptyFuncs = new Map<String, FuncType>();
+    emptyFuncs.set("print", {"paramTypes": [Type.any], "retType": Type.none, "index": -1});
+    emptyFuncs.set("globals", {"paramTypes": [Type.int, Type.int], "retType": Type.none, "index": -1});
+    //
     this.currentEnv = {
       globals: new Map(),
-      offset: 0
+      funcs: emptyFuncs,
+      offset: 0,
+      funcIndex: 0
     };
   }
   async run(source : string) : Promise<any> {

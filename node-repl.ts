@@ -18,7 +18,7 @@ const importObject = {
 
   updateNameMap : (env : GlobalEnv) => {
     env.globals.forEach((pos, name) => {
-      importObject.nameMap[pos] = name;
+      importObject.nameMap[pos.offset] = name;
     })
   }
 };
