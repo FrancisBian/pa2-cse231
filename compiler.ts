@@ -116,12 +116,12 @@ export function compile(source: string, env: GlobalEnv): CompileResult {
 
 function envLookup(env: GlobalEnv, name: string): number {
   if (!env.globals.has(name)) { console.log("Could not find " + name + " in ", env); throw new Error("Could not find name " + name); }
-  return (env.globals.get(name).offset * 8); // 4-byte values
+  return (env.globals.get(name).offset * 8); // 8-byte values
 }
 
 function funEnvLookup(env: GlobalEnv, name: string): number {
   if (!env.funcs.has(name)) { console.log("Could not find " + name + " in ", env); throw new Error("Could not find function " + name); }
-  return (env.funcs.get(name).index); // 4-byte values
+  return (env.funcs.get(name).index); //index
 }
 
 function getIfBodyCode(stmts: Array<Stmt>, env: GlobalEnv): string {
@@ -184,7 +184,7 @@ function codeGen(stmt: Stmt, env: GlobalEnv): Array<string> {
 
     case "pass":
       break;
-      
+
     case "if":
       var ifcond = codeGenExpr(stmt.ifcond, env);
       ifcond = ["(i32.and "].concat(ifcond).concat(["(i32.wrap/i64)"]).concat(["(i32.const 1))"]);

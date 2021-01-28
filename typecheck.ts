@@ -24,21 +24,16 @@ function tcStmt(stmt: Stmt, env: GlobalEnv): Type {
             const oriType: Type = env.globals.get(stmt.name).type;
             if (tcExpr(stmt.value, env) != env.globals.get(stmt.name).type) throw new Error("Expected type `" + oriType + "`; got type `" + type + "`");
             return type;
-
         case "expr":
             return tcExpr(stmt.expr, env);
-
         case "init":
             // check dup
             if (env.globals.has(stmt.name)) throw new Error("Duplicate declaration of identifier in same scope: " + stmt.name);
             env.globals.set(stmt.name, { offset: 0, type: stmt.type });
             const assignedType: Type = tcExpr(stmt.value, env);
             // check type
-            if (assignedType != stmt.type) {
-                throw new Error("Expected type `" + stmt.type + "`; got type `" + assignedType + "`");
-            }
+            if (assignedType != stmt.type) throw new Error("Expected type `" + stmt.type + "`; got type `" + assignedType + "`");
             return stmt.type;
-
         case "if":
             var ifcondType = tcExpr(stmt.ifcond, env);
             if (ifcondType != Type.bool) throw new Error("Condition expression cannot be of type `" + ifcondType + "`");
@@ -75,6 +70,7 @@ function tcExpr(expr: Expr, env: GlobalEnv): Type {
     //console.log(expr.tag);
     switch (expr.tag) {
         case "num":
+            if (Number(expr.value) > 2147483647 || Number(expr.value) < -2147483647) throw new Error("Parse error near token UNRECOGNIZED: " + Math.abs(Number(expr.value)));
             return Type.int;
         case "bool":
             return Type.bool;

@@ -90,20 +90,6 @@ export function traverseDecl(c: TreeCursor, s: string, name: string): Stmt {
 
 export function traverseStmt(c: TreeCursor, s: string): Stmt {
   switch (c.node.type.name) {
-    /*
-    case "AssignStatement":
-      c.firstChild(); // go to name
-      const name = s.substring(c.from, c.to);
-      c.nextSibling(); // go to equals
-      c.nextSibling(); // go to value
-      const value = traverseExpr(c, s);
-      c.parent();
-      return {
-        tag: "define",
-        name: name,
-        value: value
-      }
-    */
     case "AssignStatement":
       c.firstChild(); // go to name
       const name = s.substring(c.from, c.to);
@@ -129,7 +115,6 @@ export function traverseStmt(c: TreeCursor, s: string): Stmt {
       c.firstChild();
       c.nextSibling();
       const ifcond = traverseExpr(c, s);
-      //console.log("if cond: " + s.substring(c.from, c.to));
       c.nextSibling();
       c.firstChild();
       const ifthen = new Array<Stmt>();
@@ -137,32 +122,21 @@ export function traverseStmt(c: TreeCursor, s: string): Stmt {
       const els = new Array<Stmt>();
       let hasElse = false;
       let elifcond = null;
-      while (c.nextSibling()) {
-        //console.log(s.substring(c.from, c.to));
-        ifthen.push(traverseStmt(c, s));
-      }
+      while (c.nextSibling()) ifthen.push(traverseStmt(c, s));
       c.parent();
       if (c.nextSibling() && s.substring(c.from, c.to) == "elif") {
         c.nextSibling();
         elifcond = traverseExpr(c, s);
-        //console.log("elif cond: " + s.substring(c.from, c.to));
         c.nextSibling();
         c.firstChild();
-        while (c.nextSibling()) {
-          //console.log(s.substring(c.from, c.to));
-          elifthen.push(traverseStmt(c, s));
-        }
+        while (c.nextSibling()) elifthen.push(traverseStmt(c, s));
         c.parent();
       }
       if (c.nextSibling()) {
         hasElse = true;
         c.nextSibling();
-        //console.log("else: " + s.substring(c.from, c.to));
         c.firstChild();
-        while (c.nextSibling()) {
-          //console.log(s.substring(c.from, c.to));
-          els.push(traverseStmt(c, s));
-        }
+        while (c.nextSibling()) els.push(traverseStmt(c, s));
         c.parent();
       }
       c.parent();
@@ -183,23 +157,16 @@ export function traverseStmt(c: TreeCursor, s: string): Stmt {
       c.nextSibling(); // go to equals
       c.firstChild();
       const whileBody = new Array<Stmt>();
-      while (c.nextSibling()) {
-        //(s.substring(c.from, c.to));
-        whileBody.push(traverseStmt(c, s));
-      }
+      while (c.nextSibling()) whileBody.push(traverseStmt(c, s));
       c.parent();
       c.parent();
       return {
         tag: "while",
         cond: whileCond,
         body: whileBody
-      }
-      
+      } 
     case "PassStatement":
-      return {
-        tag: "pass"
-      }
-
+      return { tag: "pass" }
     case "FunctionDefinition":
       c.firstChild();
       c.nextSibling();
@@ -223,10 +190,7 @@ export function traverseStmt(c: TreeCursor, s: string): Stmt {
       c.nextSibling();
       c.firstChild();
       var funcBody = new Array<Stmt>();
-      while (c.nextSibling()) {
-        //console.log("Body: " + s.substring(c.from, c.to));
-        funcBody.push(traverseStmt(c, s));
-      }
+      while (c.nextSibling()) funcBody.push(traverseStmt(c, s));      
       c.parent();
       c.parent();
       console.log("Name: " + funcName + ", Params: " + params + ", Return type: " + ret);
@@ -251,7 +215,6 @@ export function traverseStmt(c: TreeCursor, s: string): Stmt {
     
     default:
       throw new Error("Could not parse stmt at " + c.node.from + " " + c.node.to + ": " + s.substring(c.from, c.to));
-    
   }
 }
 
