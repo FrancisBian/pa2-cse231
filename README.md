@@ -63,11 +63,26 @@ This code block will keep printing 1 when I use the python program, while freeze
 
 ### 4.For each of the following scenarios, show a screenshot of your compiler running the scenario. If your compiler cannot handle the described scenario, write a few sentences about why.
 * A function defined in the main program and later called from the interactive prompt
+![4.1](./imgs/4.1.png)
+
 * A function defined at the interactive prompt, whose body contains a call to a function from the main program, called at a later interactive prompt
+![4.2](./imgs/4.2.png)
+
 * A program that has a type error because of a mismatch of booleans and integers on one of the arithmetic operations
+![4.3](./imgs/4.3.png)
+
 * A program that has a type error in a conditional position
+![4.4](./imgs/4.4.png)
+
 * A program that calls a function from within a loop
+![4.5](./imgs/4.5.png)
+
 * Printing an integer and a boolean
+![4.6](./imgs/4.6.png)
+
 * A recursive function.
+![4.7](./imgs/4.7.png)
+
 * Two mutually-recursive functions.
+![4.8](./imgs/4.8.png)
 
